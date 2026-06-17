@@ -1,0 +1,8 @@
+pytest
+pydantic
+scikit-learn
+numpy
+requests
+# Gerçek LLM ile çalıştırmak için (puanlama için gerekli DEĞİL):
+# openai
+# python-dotenv
