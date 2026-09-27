@@ -23,133 +23,94 @@ from pydantic import BaseModel, Field
 
 # 0. Veri seti
 def load_data():
-    """
-    Koda gömülü küçük bir veri seti döndür:
-      - ilanlar: list[str] — 10-12 DAĞINIK, serbest metin Türkçe iş ilanı.
-    İlanlar çeşitli olsun: bazısı uzaktan, bazısı değil; bazısı maaş belirtir,
-    bazısı belirtmez; farklı beceriler ve deneyim yılları.
-
-    Returns:
-        list[str]
-    """
+    ilanlar = [
+        "Senior Python Developer aranıyor. 5 yıl deneyim, SQL ve Docker bilgisi şart. Uzaktan çalışma mevcut. Maaş: 90.000 TL.",
+        "Junior Data Analyst pozisyonu. Excel ve SQL bilen, 1 yıl deneyimli adaylar. Ofisten çalışma. İstanbul.",
+        "Backend geliştirici (Java). 3 yıl tecrübe, Docker ve AWS deneyimi tercih edilir. Hibrit model.",
+        "Frontend Developer - React uzmanı. 2 yıl deneyim yeterli. Tamamen remote ekip. Rekabetçi ücret sunuyoruz.",
+        "Veri Bilimci aranıyor. Python, Pandas ve SQL ileri seviye. 4 yıl deneyim. Uzaktan. Maaş görüşülecektir.",
+        "Stajyer yazılım geliştirici. Deneyim aranmıyor. Ofis İzmir. Java veya Python bilen öğrenciler.",
+        "DevOps Mühendisi. AWS ve Docker zorunlu. 6 yıl deneyim. Remote pozisyon. 120.000 TL üzeri.",
+        "Full Stack Developer. React ve Python bilgisi gerekli. 3 yıl deneyim. Hibrit çalışma, maaş 75.000 TL.",
+        "Pazarlama uzmanı. Excel raporlama. 2 yıl tecrübe. Ofisten, Ankara.",
+        "Machine Learning Engineer. Python, Pandas, AWS deneyimi. 5 yıl. Uzaktan çalışma imkanı var.",
+        "Database Administrator. SQL ve Docker. 7 yıl deneyim şart. Ofis İstanbul. Maaş yüksek.",
+        "Mobil geliştirici. Java bilgisi. 1 yıl deneyim yeterli. Remote. Ücret belirtilmemiştir.",
+    ]
+    return ilanlar
     pass
 
 
 # 1. Structured output şeması (ML-04)
 class IlanKaydi(BaseModel):
-    """
-    Bir iş ilanının yapılandırılmış kaydı. Şu alanları TANIMLA:
-      - pozisyon: str
-      - beceriler: list[str]
-      - deneyim_yili: int, 0-40 arası (Field(ge=0, le=40))
-      - uzaktan_mi: bool
-      - maas_belirtilmis: bool
-    """
+    pozisyon: str
+    beceriler: list[str]
+    deneyim_yili: int = Field(ge=0, le=40)
+    uzaktan_mi: bool
+    maas_belirtilmis: bool
     pass
 
 
 # 2. Prompt kurulumu (ML-02)
 def build_prompt(ilan):
-    """
-    Modele verilecek prompt'u kur. Prompt MUTLAKA:
-      - `ilan` metnini içermeli,
-      - modelden pozisyon + beceriler + deneyim_yili + uzaktan_mi +
-        maas_belirtilmis alanlarını JSON olarak istemeli.
-
-    Args:
-        ilan: str
-    Returns:
-        str: prompt
-    """
+    return (
+        "Şu iş ilanını analiz et ve SADECE JSON döndür.\n"
+        "Alanlar: pozisyon (str), beceriler (str listesi), "
+        "deneyim_yili (0-40 tam sayı, belirtilmemişse 0), "
+        "uzaktan_mi (true/false), maas_belirtilmis (true/false).\n\n"
+        f"İlan: {ilan}"
+    )
     pass
 
 
 # 3. Tek ilanı çıkar
 def cikar(ilan, llm):
-    """
-    1. build_prompt ile prompt kur.
-    2. `cevap = llm(prompt)` ile modeli çağır (JSON string döner).
-    3. Cevabı IlanKaydi şemasıyla doğrula ve dict olarak döndür.
-       İpucu: IlanKaydi.model_validate_json(cevap).model_dump()
-
-    Args:
-        ilan: str
-        llm: callable — prompt(str) alır, JSON string döndürür
-    Returns:
-        dict: {"pozisyon", "beceriler", "deneyim_yili", "uzaktan_mi",
-               "maas_belirtilmis"}
-    """
+    prompt = build_prompt(ilan)
+    cevap = llm(prompt)  # JSON string döner
+    return IlanKaydi.model_validate_json(cevap).model_dump()
     pass
 
 
 # 4. Toplu çıkarım (ML-06 — batch apply)
 def toplu_cikar(ilanlar, llm):
-    """
-    Her ilanı `cikar` ile yapısal kayda çevir, dict listesi döndür.
-
-    Args:
-        ilanlar: list[str]
-        llm: callable
-    Returns:
-        list[dict]
-    """
+    return [cikar(i, llm) for i in ilanlar]
     pass
 
 
 # 5. İÇGÖRÜ — en çok aranan beceriler (ML-06)
 def en_cok_beceri(kayitlar, n=5):
-    """
-    Tüm kayıtların `beceriler` listelerini topla, en çok geçen n beceriyi
-    (string) liste olarak döndür. İpucu: collections.Counter.
+    sayac = Counter()
+    for k in kayitlar:
+        sayac.update(k["beceriler"])
+    return [beceri for beceri, _ in sayac.most_common(n)]
 
-    Args:
-        kayitlar: list[dict]
-        n: int
-    Returns:
-        list[str]
-    """
     pass
 
 
 # 6. İÇGÖRÜ — uzaktan çalışma oranı
 def uzaktan_orani(kayitlar):
-    """
-    `uzaktan_mi == True` olan kayıtların oranını (0.0-1.0) döndür.
-    Kayıt yoksa 0.0 döndür.
-
-    Args:
-        kayitlar: list[dict]
-    Returns:
-        float
-    """
+    if not kayitlar:
+        return 0.0
+    uzaktan = sum(1 for k in kayitlar if k["uzaktan_mi"])
+    return uzaktan / len(kayitlar)
     pass
 
 
 # 7. İÇGÖRÜ — ortalama deneyim
 def ortalama_deneyim(kayitlar):
-    """
-    Tüm kayıtların `deneyim_yili` ortalamasını döndür.
-    Kayıt yoksa 0.0 döndür.
-
-    Args:
-        kayitlar: list[dict]
-    Returns:
-        float
-    """
+    if not kayitlar:
+        return 0.0
+    return sum(k["deneyim_yili"] for k in kayitlar) / len(kayitlar)
     pass
 
 
 # 8. Uçtan uca pipeline
 def pipeline(ilanlar, llm):
-    """
-    Hepsini birleştir:
-      1. toplu_cikar ile tüm ilanları yapısal kayda çevir (kayitlar),
-      2. en_cok_beceri ile en çok aranan becerileri bul,
-      3. uzaktan_orani ile uzaktan çalışma oranını bul,
-      4. ortalama_deneyim ile ortalama deneyimi bul.
-
-    Returns:
-        dict: {"kayitlar": [...], "en_cok_beceri": [...],
-               "uzaktan_orani": float, "ortalama_deneyim": float}
-    """
+    kayitlar = toplu_cikar(ilanlar, llm)
+    return {
+        "kayitlar": kayitlar,
+        "en_cok_beceri": en_cok_beceri(kayitlar),
+        "uzaktan_orani": uzaktan_orani(kayitlar),
+        "ortalama_deneyim": ortalama_deneyim(kayitlar),
+    }
     pass
